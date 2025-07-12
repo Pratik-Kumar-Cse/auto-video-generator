@@ -7,6 +7,7 @@ class EventStream(str, Enum):
     AUDIO = "AUDIO"
     AVATAR = "AVATAR"
     STOCK = "STOCK"
+    NOTIFICATION = "NOTIFICATION"
 
 
 class EventProcessType(str, Enum):

@@ -3,24 +3,27 @@ Script service for handling script-related operations
 Enhanced with comprehensive functionality and optimizations
 """
 
-import json
 import asyncio
-import uuid
-from typing import Optional, Dict, List, Any, Tuple
-from datetime import datetime, timedelta
-from bson import ObjectId
-from app.constant.enum.script_enum import ScriptType
-from concurrent.futures import ThreadPoolExecutor
-from app.agents.script_generator.workflow import ScriptWorkFlow
-from app.core.redis_client import redis_service
-from app.core.exceptions import ScriptProcessingException
-from .llm.llm_call import generate_ai_script
-from app.utils.media_utils import MediaUtils
-import aiohttp
 import re
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
-from ..core.database import get_database
+
+import aiohttp
+from bson import ObjectId
+
+from app.agents.script_generator.workflow import ScriptWorkFlow
+from app.constant.enum.script_enum import ScriptType
+from app.core.exceptions import ScriptProcessingException
 from app.loggers.logger import get_logger
+from app.utils.media_utils import MediaUtils
+
+from ..constants.enum.event_enum import EventStream
+from ..core.database import get_database
+from ..helper.sse_manager import SseManager
+from .llm.llm_call import generate_ai_script
 
 logger = get_logger(__name__)
 
@@ -37,7 +40,8 @@ class ScriptService:
         self._trending_topics_cache = None
         self._cache_timestamp = None
         self._cache_duration = 3600  # 1 hour
-        
+        self.sse_manager = SseManager()
+
         logger.info("ScriptService initialized")
 
     async def _ensure_db_connection(self):
@@ -63,9 +67,7 @@ class ScriptService:
     ) -> Dict[str, Any]:
         """Create a new script with enhanced metadata"""
         try:
-            logger.info(
-                f"Creating script for user {user_id}: {title[:50]}..."
-            )
+            logger.info(f"Creating script for user {user_id}: {title[:50]}...")
             await self._ensure_db_connection()
 
             # Input validation
@@ -103,16 +105,14 @@ class ScriptService:
 
             result = await self.collection.insert_one(script_data)
             script_data["_id"] = str(result.inserted_id)
-            
+
             logger.info(
                 f"Script created successfully: {script_data['_id']} "
                 f"for user {user_id}"
             )
 
             # Send creation notification
-            await self._send_script_notification(
-                user_id, "script_created", script_data
-            )
+            await self._send_script_notification(user_id, "script_created", script_data)
 
             return script_data
 
@@ -359,26 +359,17 @@ class ScriptService:
 
             task_id = str(uuid.uuid4())
 
-            await self._generate_script_background(
-                topic,
-                video_type,
-                keywords,
-                input_type,
-                video_link,
-                task_id,
+            # Start background task
+            asyncio.create_task(
+                self._generate_script_background(
+                    topic,
+                    video_type,
+                    keywords,
+                    input_type,
+                    video_link,
+                    task_id,
+                )
             )
-
-            # # Start background task
-            # asyncio.create_task(
-            #     self._generate_script_background(
-            #         topic,
-            #         video_type,
-            #         keywords,
-            #         input_type,
-            #         video_link,
-            #         task_id,
-            #     )
-            # )
 
             return task_id
 
@@ -428,15 +419,11 @@ class ScriptService:
             # Prepare arguments
             args = [topic, video_type, keywords]
 
-            # if video_link:
-            #     args.extend([None, video_link])
+            if video_link:
+                args.add(video_link)
 
             # Generate script
-            script = await asyncio.get_event_loop().run_in_executor(
-                self.executor, script_function, *args
-            )
-
-            # script = await self.script_workflow.script_using_topic(*args)
+            script = script_function(*args)
 
             print("script:", script)
 
@@ -464,12 +451,12 @@ class ScriptService:
 
             # Send completion message
             await self._send_sse_update(task_id, "Script generation completed!", 100)
-            await self._send_completion_message(task_id, script_data, None)
 
         except Exception as e:
             logger.error(f"Error in background script generation: {e}")
             print(f"Error in background script generation: {e}")
-            await self._send_error_message(task_id, str(e), None)
+            # Send completion message
+            await self._send_sse_update(task_id, "Script generation completed!", 100)
 
     async def validate_link(self, link: str, link_type: str) -> bool:
         """Enhanced link validation with content checking"""
@@ -616,9 +603,10 @@ class ScriptService:
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-            channel = f"script_notifications:{user_id}"
-            await asyncio.get_event_loop().run_in_executor(
-                None, redis_service.publish, channel, json.dumps(notification)
+            self.sse_manager.send_update(
+                event_name=EventStream.NOTIFICATION,
+                data=notification,
+                client_id=user_id,
             )
 
         except Exception as e:
@@ -641,73 +629,14 @@ class ScriptService:
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-            channel = f"script_progress:{client_id}"
-            await asyncio.get_event_loop().run_in_executor(
-                None, redis_service.publish, channel, json.dumps(update_data)
+            self.sse_manager.send_update(
+                event_name=EventStream.SCRIPT,
+                data=update_data,
+                client_id=client_id,
             )
 
         except Exception as e:
             logger.error(f"Failed to send SSE update: {e}")
-
-    async def _send_completion_message(
-        self, task_id: str, script_data: Dict[str, Any], client_id: Optional[str]
-    ):
-        """Send completion message via Redis"""
-        try:
-            completion_data = {
-                "task_id": task_id,
-                "status": "completed",
-                "script": script_data,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-
-            if client_id:
-                channel = f"script_progress:{client_id}"
-                await asyncio.get_event_loop().run_in_executor(
-                    None, redis_service.publish, channel, json.dumps(completion_data)
-                )
-
-            # Also store in task queue
-            queue_key = f"script_queue:{task_id}"
-            await asyncio.get_event_loop().run_in_executor(
-                None, redis_service.rpush, queue_key, json.dumps(completion_data)
-            )
-            await asyncio.get_event_loop().run_in_executor(
-                None, redis_service.rpush, queue_key, "[DONE]"
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to send completion message: {e}")
-
-    async def _send_error_message(
-        self, task_id: str, error_message: str, client_id: Optional[str]
-    ):
-        """Send error message via Redis"""
-        try:
-            error_data = {
-                "task_id": task_id,
-                "status": "error",
-                "error": error_message,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-
-            if client_id:
-                channel = f"script_progress:{client_id}"
-                await asyncio.get_event_loop().run_in_executor(
-                    None, redis_service.publish, channel, json.dumps(error_data)
-                )
-
-            # Also store in task queue
-            queue_key = f"script_queue:{task_id}"
-            await asyncio.get_event_loop().run_in_executor(
-                None, redis_service.rpush, queue_key, json.dumps(error_data)
-            )
-            await asyncio.get_event_loop().run_in_executor(
-                None, redis_service.rpush, queue_key, "[DONE]"
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to send error message: {e}")
 
     async def cleanup_old_scripts(self, days_old: int = 30):
         """Clean up old deleted scripts"""

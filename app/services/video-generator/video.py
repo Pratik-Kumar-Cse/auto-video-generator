@@ -1,77 +1,66 @@
 import json
 import logging
 import os
-from bson import ObjectId
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
-from ..audio import AudioService
-from app.providers.tavus import TavusService
-from ...repositories.avatar_repository import AvatarRepository
-from ...repositories.video_repository import VideoRepository
-from ...repositories.script_repository import ScriptRepository
-from ...repositories.user_repository import AuthRepository
-from ...repositories.brand_repository import BrandRepository
-from app.repositories.audio_repository import AudioRepository
-from termcolor import colored
-from app.constant.notification_enums import NotificationType
-from app.constant.video_enums import VideoViewType, VideoStatus
-from app.agent.video_clip.workflow import generate_sub_clips
 from app.agent.image.workflow import generate_images
 from app.agent.search_terms.workflow import generate_search_terms
+from app.agent.video_clip.workflow import generate_sub_clips
+from app.constant.constant import MESSAGES, VIDEO_PROCESSING_TYPES, VIDEO_TEMPLATES
+from app.constant.notification_enums import NotificationType
 from app.constant.script_enums import ScriptType
 from app.constant.user_enums import EmailType
-from app.constant.constant import VIDEO_PROCESSING_TYPES, MESSAGES
-from app.loggers.monitoring import sentry_client
-from ..youtube import download_youtube_video
-from werkzeug.exceptions import NotFound, BadRequest, InternalServerError
-from ..llm.multi_model_call import get_video_clips_details
-from ..llm.llm_call import get_title, get_script_text, get_intro_placement_time
-from .stock_video import search_for_stock_videos_on_story_block, search_for_stock_videos
-from ..utils import save_video, download_image, create_dir, clean_dir
-from .video_template import long_video1, test_long_video
-from .reel_template import create_reel_video1, create_reel_video
-from .utils import stop_ffmpeg_processes
-from app.services.usage import UsageService
-from app.helper.mailer import EmailService
-from ..notification import NotificationService
-
-from app.factory.event_data_factory import EventDataFactory
-from .video_edit import create_thumbnail
-
+from app.constant.video_enums import VideoStatus, VideoViewType
 from app.exceptions.video_exceptions import VideoCreationFailed
-
-from app.helper.s3_manager import S3Uploader
-
-from app.providers.assembly_ai import create_subtitle_file
-
-from config import config
-
-
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips  # type: ignore
-
-from collections import defaultdict
-
-from .video_template_processor import VideoTemplateProcessor
-
-
-from ..utils import (
-    unlink_folder,
-    format_duration,
-    str_replace,
-    check_url_expiration,
-)
-
-
-from app.helper.utils import read_folder_and_upload
-
-from .video_resolution_converter import convert_video
-
-from app.constant.constant import (
-    VIDEO_TEMPLATES,
-)
-
+from app.factory.event_data_factory import EventDataFactory
+from app.helper.mailer import EmailService
 from app.helper.redis import RedisClient
+from app.helper.s3_manager import S3Uploader
+from app.helper.utils import read_folder_and_upload
+from app.loggers.monitoring import sentry_client
+from app.providers.assembly_ai import create_subtitle_file
+from app.providers.tavus import TavusService
+from app.repositories.audio_repository import AudioRepository
+from app.services.usage import UsageService
+from bson import ObjectId
+from config import config
+from moviepy.editor import (  # type: ignore
+    AudioFileClip,
+    VideoFileClip,
+    concatenate_videoclips,
+)
+from termcolor import colored
+from werkzeug.exceptions import BadRequest, InternalServerError, NotFound
+
+from ...repositories.avatar_repository import AvatarRepository
+from ...repositories.brand_repository import BrandRepository
+from ...repositories.script_repository import ScriptRepository
+from ...repositories.user_repository import AuthRepository
+from ...repositories.video_repository import VideoRepository
+from ..audio import AudioService
+from ..llm.llm_call import get_intro_placement_time, get_script_text, get_title
+from ..llm.multi_model_call import get_video_clips_details
+from ..notification import NotificationService
+from ..utils import (
+    check_url_expiration,
+    clean_dir,
+    create_dir,
+    download_image,
+    format_duration,
+    save_video,
+    str_replace,
+    unlink_folder,
+)
+from ..youtube import download_youtube_video
+from .reel_template import create_reel_video, create_reel_video1
+from .stock_video import search_for_stock_videos, search_for_stock_videos_on_story_block
+from .utils import stop_ffmpeg_processes
+from .video_edit import create_thumbnail
+from .video_resolution_converter import convert_video
+from .video_template import long_video1, test_long_video
+from .video_template_processor import VideoTemplateProcessor
 
 # Configure logging
 logging.basicConfig(
