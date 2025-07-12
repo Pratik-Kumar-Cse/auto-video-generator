@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Generator Event Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .event-section {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .event-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        input, button, select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .events-log {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f8f9fa;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .event-item {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background-color: white;
+        }
+        .event-item.error {
+            border-left-color: #dc3545;
+        }
+        .event-item.success {
+            border-left-color: #28a745;
+        }
+        .event-item.warning {
+            border-left-color: #ffc107;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Generator Event Client</h1>
+        <p>Real-time event monitoring for script and video generation</p>
+    </div>
+
+    <div class="container">
+        <h2>Connection Settings</h2>
+        <div class="controls">
+            <input type="text" id="baseUrl" placeholder="API Base URL" value="http://localhost:8000/api/v1">
+            <input type="text" id="clientId" placeholder="Client ID" value="test-client-123">
+            <button onclick="connectToSSE()">Connect to SSE</button>
+            <button onclick="disconnectSSE()">Disconnect</button>
+        </div>
+        <div id="connectionStatus" class="status disconnected">Disconnected</div>
+    </div>
+
+    <div class="container">
+        <div class="event-section">
+            <h3>Script Generation Events</h3>
+            <div class="controls">
+                <input type="text" id="scriptTaskId" placeholder="Task ID" value="script-task-123">
+                <button onclick="listenScriptEvents()">Listen to Script Events</button>
+                <button onclick="sendScriptUpdate()">Send Test Update</button>
+                <button onclick="completeScript()">Complete Script</button>
+            </div>
+            <div id="scriptStatus" class="status disconnected">Not listening</div>
+            <div id="scriptEvents" class="events-log"></div>
+        </div>
+
+        <div class="event-section">
+            <h3>Video Generation Events</h3>
+            <div class="controls">
+                <input type="text" id="videoId" placeholder="Video ID" value="video-123">
+                <button onclick="listenVideoEvents()">Listen to Video Events</button>
+                <button onclick="sendVideoUpdate()">Send Test Update</button>
+                <button onclick="completeVideo()">Complete Video</button>
+            </div>
+            <div id="videoStatus" class="status disconnected">Not listening</div>
+            <div id="videoEvents" class="events-log"></div>
+        </div>
+    </div>
+
+    <script>
+        let sseConnection = null;
+        let scriptEventSource = null;
+        let videoEventSource = null;
+
+        function updateConnectionStatus(status, message) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = message;
+        }
+
+        function updateScriptStatus(status, message) {
+            const statusEl = document.getElementById('scriptStatus');
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = message;
+        }
+
+        function updateVideoStatus(status, message) {
+            const statusEl = document.getElementById('videoStatus');
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = message;
+        }
+
+        function addEventToLog(logId, event, type = 'info') {
+            const logEl = document.getElementById(logId);
+            const eventEl = document.createElement('div');
+            eventEl.className = `event-item ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            eventEl.innerHTML = `
+                <div class="timestamp">${timestamp}</div>
+                <div>${JSON.stringify(event, null, 2)}</div>
+            `;
+            
+            logEl.appendChild(eventEl);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function connectToSSE() {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const clientId = document.getElementById('clientId').value;
+            
+            if (!baseUrl || !clientId) {
+                alert('Please provide base URL and client ID');
+                return;
+            }
+
+            updateConnectionStatus('connecting', 'Connecting to SSE...');
+
+            // Note: This is a simplified connection for demo purposes
+            // In a real implementation, you would need proper authentication
+            const sseUrl = `${baseUrl}/sse/events?token=demo-token`;
+            
+            sseConnection = new EventSource(sseUrl);
+            
+            sseConnection.onopen = function(event) {
+                updateConnectionStatus('connected', 'Connected to SSE');
+                addEventToLog('scriptEvents', {type: 'connection', message: 'SSE Connected'}, 'success');
+            };
+            
+            sseConnection.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    addEventToLog('scriptEvents', {type: 'message', data: data});
+                } catch (e) {
+                    addEventToLog('scriptEvents', {type: 'raw', data: event.data});
+                }
+            };
+            
+            sseConnection.onerror = function(event) {
+                updateConnectionStatus('disconnected', 'SSE Connection Error');
+                addEventToLog('scriptEvents', {type: 'error', message: 'SSE Error'}, 'error');
+            };
+        }
+
+        function disconnectSSE() {
+            if (sseConnection) {
+                sseConnection.close();
+                sseConnection = null;
+            }
+            if (scriptEventSource) {
+                scriptEventSource.close();
+                scriptEventSource = null;
+            }
+            if (videoEventSource) {
+                videoEventSource.close();
+                videoEventSource = null;
+            }
+            
+            updateConnectionStatus('disconnected', 'Disconnected');
+            updateScriptStatus('disconnected', 'Not listening');
+            updateVideoStatus('disconnected', 'Not listening');
+        }
+
+        function listenScriptEvents() {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const clientId = document.getElementById('clientId').value;
+            const taskId = document.getElementById('scriptTaskId').value;
+            
+            if (!baseUrl || !clientId || !taskId) {
+                alert('Please provide all required fields');
+                return;
+            }
+
+            updateScriptStatus('connecting', 'Connecting to script events...');
+
+            const eventUrl = `${baseUrl}/events/script-generation/${taskId}?client_id=${clientId}`;
+            scriptEventSource = new EventSource(eventUrl);
+            
+            scriptEventSource.onopen = function(event) {
+                updateScriptStatus('connected', `Listening to script events for ${taskId}`);
+                addEventToLog('scriptEvents', {type: 'script_connection', taskId: taskId}, 'success');
+            };
+            
+            scriptEventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    addEventToLog('scriptEvents', {type: 'script_event', data: data});
+                } catch (e) {
+                    addEventToLog('scriptEvents', {type: 'script_raw', data: event.data});
+                }
+            };
+            
+            scriptEventSource.onerror = function(event) {
+                updateScriptStatus('disconnected', 'Script events connection error');
+                addEventToLog('scriptEvents', {type: 'script_error', message: 'Connection Error'}, 'error');
+            };
+        }
+
+        function listenVideoEvents() {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const clientId = document.getElementById('clientId').value;
+            const videoId = document.getElementById('videoId').value;
+            
+            if (!baseUrl || !clientId || !videoId) {
+                alert('Please provide all required fields');
+                return;
+            }
+
+            updateVideoStatus('connecting', 'Connecting to video events...');
+
+            const eventUrl = `${baseUrl}/events/video-generation/${videoId}?client_id=${clientId}`;
+            videoEventSource = new EventSource(eventUrl);
+            
+            videoEventSource.onopen = function(event) {
+                updateVideoStatus('connected', `Listening to video events for ${videoId}`);
+                addEventToLog('videoEvents', {type: 'video_connection', videoId: videoId}, 'success');
+            };
+            
+            videoEventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    addEventToLog('videoEvents', {type: 'video_event', data: data});
+                } catch (e) {
+                    addEventToLog('videoEvents', {type: 'video_raw', data: event.data});
+                }
+            };
+            
+            videoEventSource.onerror = function(event) {
+                updateVideoStatus('disconnected', 'Video events connection error');
+                addEventToLog('videoEvents', {type: 'video_error', message: 'Connection Error'}, 'error');
+            };
+        }
+
+        async function sendScriptUpdate() {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const clientId = document.getElementById('clientId').value;
+            const taskId = document.getElementById('scriptTaskId').value;
+            
+            try {
+                const response = await fetch(`${baseUrl}/events/script-generation/${taskId}/update?client_id=${clientId}&status=processing&progress=50&message=Generating script content...`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                addEventToLog('scriptEvents', {type: 'update_sent', result: result}, 'success');
+            } catch (error) {
+                addEventToLog('scriptEvents', {type: 'update_error', error: error.message}, 'error');
+            }
+        }
+
+        async function sendVideoUpdate() {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const clientId = document.getElementById('clientId').value;
+            const videoId = document.getElementById('videoId').value;
+            
+            try {
+                const response = await fetch(`${baseUrl}/events/video-generation/${videoId}/update?client_id=${clientId}&status=processing&progress=30&message=Processing video content...`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                addEventToLog('videoEvents', {type: 'update_sent', result: result}, 'success');
+            } catch (error) {
+                addEventToLog('videoEvents', {type: 'update_error', error: error.message}, 'error');
+            }
+        }
+
+        async function completeScript() {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const clientId = document.getElementById('clientId').value;
+            const taskId = document.getElementById('scriptTaskId').value;
+            
+            const scriptData = {
+                id: taskId,
+                title: "Generated Script",
+                content: "This is a sample generated script content...",
+                word_count: 150,
+                duration: 90
+            };
+            
+            try {
+                const response = await fetch(`${baseUrl}/events/script-generation/${taskId}/complete?client_id=${clientId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(scriptData)
+                });
+                
+                const result = await response.json();
+                addEventToLog('scriptEvents', {type: 'completion_sent', result: result}, 'success');
+            } catch (error) {
+                addEventToLog('scriptEvents', {type: 'completion_error', error: error.message}, 'error');
+            }
+        }
+
+        async function completeVideo() {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const clientId = document.getElementById('clientId').value;
+            const videoId = document.getElementById('videoId').value;
+            
+            const videoData = {
+                id: videoId,
+                title: "Generated Video",
+                url: "https://example.com/video.mp4",
+                duration: 120,
+                resolution: "1080p"
+            };
+            
+            try {
+                const response = await fetch(`${baseUrl}/events/video-generation/${videoId}/complete?client_id=${clientId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(videoData)
+                });
+                
+                const result = await response.json();
+                addEventToLog('videoEvents', {type: 'completion_sent', result: result}, 'success');
+            } catch (error) {
+                addEventToLog('videoEvents', {type: 'completion_error', error: error.message}, 'error');
+            }
+        }
+
+        // Auto-connect on page load for demo purposes
+        window.addEventListener('load', function() {
+            // Uncomment the line below to auto-connect
+            // connectToSSE();
+        });
+    </script>
+</body>
+</html>

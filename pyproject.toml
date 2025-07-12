@@ -7,10 +7,10 @@ readme = "README.md"
 packages = [{include = "app"}]
 
 [tool.poetry.dependencies]
-python = "^3.9"
-fastapi = "^0.104.1"
+python = ">=3.10,<3.13"
+fastapi = "^0.115.0"
 uvicorn = {extras = ["standard"], version = "^0.24.0"}
-python-multipart = "^0.0.6"
+python-multipart = "^0.0.9"
 motor = "^3.3.2"
 pymongo = "^4.6.0"
 redis = "^5.0.1"
@@ -22,7 +22,7 @@ passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 pydantic = "^2.5.0"
 pydantic-settings = "^2.1.0"
 python-dotenv = "^1.0.0"
-httpx = "^0.25.2"
+httpx = "^0.27.0"
 aiohttp = "^3.9.1"
 email-validator = "^2.1.0"
 python-dateutil = "^2.8.2"
@@ -30,11 +30,16 @@ structlog = "^23.2.0"
 rich = "^13.7.0"
 requests = "^2.31.0"
 Jinja2 = "^3.1.2"
-pyautogen = "^0.2.0"
 opencv-python = "^4.8.1.78"
-Pillow = "^10.1.0"
+Pillow = "^11.0.0"
 mutagen = "^1.47.0"
 boto3 = "^1.34.0"
+moviepy = "^1.0.3"
+mcp = "^1.0.0"
+autogen-agentchat = "0.6.2"
+autogen-ext = "0.6.2"
+openai = "^1.93.0"
+tiktoken = "^0.9.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
@@ -46,7 +51,7 @@ isort = "^5.12.0"
 
 [tool.poetry.group.optional.dependencies]
 opencv-python = {version = "^4.8.1.78", optional = true}
-Pillow = {version = "^10.1.0", optional = true}
+Pillow = {version = "^11.0.0", optional = true}
 moviepy = {version = "^1.0.3", optional = true}
 boto3 = {version = "^1.34.0", optional = true}
 google-cloud-storage = {version = "^2.10.0", optional = true}

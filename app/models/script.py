@@ -35,9 +35,6 @@ class GenerateScriptRequest(BaseModel):
     video_type: str = Field(..., description="Type of video")
     keywords: Optional[Dict[str, Any]] = Field(default={}, description="Keywords")
     input_type: str = Field(..., description="Input type (VIDEO, BLOG, TOPIC)")
-    add_brand: Optional[bool] = Field(default=False, description="Add brand info")
-    music_media_id: Optional[str] = Field(None, description="Music media ID")
-    link: Optional[str] = Field(None, description="Link for video/blog input")
     video_link: Optional[str] = Field(None, description="Video link")
 
 

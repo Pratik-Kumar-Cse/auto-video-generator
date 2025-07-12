@@ -221,13 +221,13 @@ print_success "External services configuration checked"
 # Start Celery worker in background (if Redis is available)
 if [ ! -z "$REDIS_URL" ]; then
     print_status "Starting Celery worker..."
-    poetry run celery -A app.tasks.celery_app worker --loglevel=info --detach &
+    poetry run celery -A app.core.celery_app worker --loglevel=info --detach &
     CELERY_WORKER_PID=$!
     print_success "Celery worker started (PID: $CELERY_WORKER_PID)"
 
     # Start Celery beat scheduler in background (for periodic tasks)
     print_status "Starting Celery beat scheduler..."
-    poetry run celery -A app.tasks.celery_app beat --loglevel=info --detach &
+    poetry run celery -A app.core.celery_app beat --loglevel=info --detach &
     CELERY_BEAT_PID=$!
     print_success "Celery beat scheduler started (PID: $CELERY_BEAT_PID)"
 else
@@ -271,7 +271,7 @@ print_status ""
 poetry run uvicorn main:app \
     --host $HOST \
     --port $PORT \
-    --reload \
+    # --reload \
     --log-level info \
     --access-log \
     --use-colors

@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Client Test - Video Generator API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .header {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .connection-status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .demo-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .events-log {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f8f9fa;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .event-item {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+            background-color: white;
+        }
+        .event-timestamp {
+            color: #666;
+            font-size: 11px;
+        }
+        .event-type {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .event-data {
+            margin-top: 5px;
+            white-space: pre-wrap;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #28a745;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>SSE Client Test - Video Generator API</h1>
+        <p>Test Server-Sent Events functionality</p>
+    </div>
+
+    <div class="container">
+        <h2>Connection</h2>
+        <div id="connectionStatus" class="connection-status disconnected">
+            Disconnected
+        </div>
+        
+        <div class="form-group">
+            <label for="serverUrl">Server URL:</label>
+            <input type="text" id="serverUrl" value="http://localhost:8000" placeholder="http://localhost:8000">
+        </div>
+        
+        <div class="form-group">
+            <label for="authToken">Authentication Token:</label>
+            <input type="text" id="authToken" placeholder="Enter your JWT token here">
+        </div>
+        
+        <button id="connectBtn" onclick="toggleConnection()">Connect</button>
+    </div>
+
+    <div class="container">
+        <h2>Statistics</h2>
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value" id="eventsReceived">0</div>
+                <div class="stat-label">Events Received</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="connectionTime">00:00</div>
+                <div class="stat-label">Connection Time</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="lastEventTime">Never</div>
+                <div class="stat-label">Last Event</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Demo Controls</h2>
+        <div class="form-group">
+            <label for="clientId">Client ID (for demos):</label>
+            <input type="text" id="clientId" placeholder="Enter client ID or leave empty to use token user">
+        </div>
+        
+        <div class="demo-buttons">
+            <button onclick="triggerScriptDemo()">Script Generation Demo</button>
+            <button onclick="triggerVideoDemo()">Video Processing Demo</button>
+            <button onclick="triggerNotificationDemo()">Notification Demo</button>
+            <button onclick="sendCustomNotification()">Send Custom Notification</button>
+            <button onclick="getSSEStatus()">Get SSE Status</button>
+            <button onclick="clearEvents()">Clear Events Log</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Progress Tracking</h2>
+        <div id="progressContainer" style="display: none;">
+            <div><strong id="progressLabel">Task Progress</strong></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%;">0%</div>
+            </div>
+            <div id="progressMessage">Ready to start...</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Events Log</h2>
+        <div class="events-log" id="eventsLog">
+            <div class="event-item">
+                <div class="event-timestamp">Ready to receive events...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let isConnected = false;
+        let eventsCount = 0;
+        let connectionStartTime = null;
+        let connectionTimer = null;
+
+        function toggleConnection() {
+            if (isConnected) {
+                disconnect();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const authToken = document.getElementById('authToken').value;
+
+            if (!authToken) {
+                alert('Please enter an authentication token');
+                return;
+            }
+
+            const sseUrl = `${serverUrl}/api/v1/sse/events?token=${encodeURIComponent(authToken)}`;
+            
+            try {
+                eventSource = new EventSource(sseUrl);
+                connectionStartTime = new Date();
+                
+                eventSource.onopen = function(event) {
+                    isConnected = true;
+                    updateConnectionStatus();
+                    logEvent('Connection', 'Connected to SSE stream', {});
+                    startConnectionTimer();
+                };
+
+                eventSource.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleEvent(data, event);
+                    } catch (e) {
+                        logEvent('Raw Message', event.data, {});
+                    }
+                };
+
+                eventSource.onerror = function(event) {
+                    logEvent('Error', 'Connection error occurred', event);
+                    if (eventSource.readyState === EventSource.CLOSED) {
+                        disconnect();
+                    }
+                };
+
+                // Listen for specific event types
+                eventSource.addEventListener('script_generation', function(event) {
+                    const data = JSON.parse(event.data);
+                    handleScriptGenerationEvent(data);
+                });
+
+                eventSource.addEventListener('video_stream', function(event) {
+                    const data = JSON.parse(event.data);
+                    handleVideoProcessingEvent(data);
+                });
+
+                eventSource.addEventListener('notification', function(event) {
+                    const data = JSON.parse(event.data);
+                    handleNotificationEvent(data);
+                });
+
+            } catch (error) {
+                alert('Failed to connect: ' + error.message);
+            }
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            isConnected = false;
+            updateConnectionStatus();
+            stopConnectionTimer();
+            logEvent('Connection', 'Disconnected from SSE stream', {});
+        }
+
+        function updateConnectionStatus() {
+            const statusEl = document.getElementById('connectionStatus');
+            const connectBtn = document.getElementById('connectBtn');
+            
+            if (isConnected) {
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'connection-status connected';
+                connectBtn.textContent = 'Disconnect';
+            } else {
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'connection-status disconnected';
+                connectBtn.textContent = 'Connect';
+            }
+        }
+
+        function handleEvent(data, event) {
+            eventsCount++;
+            document.getElementById('eventsReceived').textContent = eventsCount;
+            document.getElementById('lastEventTime').textContent = new Date().toLocaleTimeString();
+            
+            logEvent(event.type || 'message', 'Event received', data);
+        }
+
+        function handleScriptGenerationEvent(data) {
+            if (data.progress !== undefined) {
+                updateProgress(data.progress, data.message || 'Script Generation', data.message);
+            }
+        }
+
+        function handleVideoProcessingEvent(data) {
+            if (data.progress !== undefined) {
+                updateProgress(data.progress, 'Video Processing', data.message);
+            }
+        }
+
+        function handleNotificationEvent(data) {
+            // Show browser notification if supported
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(data.title || 'Notification', {
+                    body: data.message,
+                    icon: '/favicon.ico'
+                });
+            }
+        }
+
+        function updateProgress(progress, label, message) {
+            const progressContainer = document.getElementById('progressContainer');
+            const progressFill = document.getElementById('progressFill');
+            const progressLabel = document.getElementById('progressLabel');
+            const progressMessage = document.getElementById('progressMessage');
+
+            progressContainer.style.display = 'block';
+            progressFill.style.width = progress + '%';
+            progressFill.textContent = Math.round(progress) + '%';
+            progressLabel.textContent = label;
+            progressMessage.textContent = message || 'Processing...';
+
+            if (progress >= 100) {
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        function logEvent(type, message, data) {
+            const eventsLog = document.getElementById('eventsLog');
+            const eventItem = document.createElement('div');
+            eventItem.className = 'event-item';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const dataStr = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
+            
+            eventItem.innerHTML = `
+                <div class="event-timestamp">${timestamp}</div>
+                <div class="event-type">${type}</div>
+                <div>${message}</div>
+                <div class="event-data">${dataStr}</div>
+            `;
+            
+            eventsLog.insertBefore(eventItem, eventsLog.firstChild);
+            
+            // Keep only last 50 events
+            while (eventsLog.children.length > 50) {
+                eventsLog.removeChild(eventsLog.lastChild);
+            }
+        }
+
+        function startConnectionTimer() {
+            connectionTimer = setInterval(() => {
+                if (connectionStartTime) {
+                    const elapsed = new Date() - connectionStartTime;
+                    const minutes = Math.floor(elapsed / 60000);
+                    const seconds = Math.floor((elapsed % 60000) / 1000);
+                    document.getElementById('connectionTime').textContent = 
+                        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }, 1000);
+        }
+
+        function stopConnectionTimer() {
+            if (connectionTimer) {
+                clearInterval(connectionTimer);
+                connectionTimer = null;
+            }
+            document.getElementById('connectionTime').textContent = '00:00';
+        }
+
+        function getClientId() {
+            const clientId = document.getElementById('clientId').value;
+            if (clientId) {
+                return clientId;
+            }
+            
+            // Try to extract user ID from token (simplified)
+            const token = document.getElementById('authToken').value;
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    return payload.sub || 'default_user';
+                } catch (e) {
+                    return 'default_user';
+                }
+            }
+            return 'default_user';
+        }
+
+        async function triggerScriptDemo() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const clientId = getClientId();
+            
+            try {
+                const response = await fetch(`${serverUrl}/api/v1/sse/demo/script-generation/${clientId}?topic=AI Technology&duration=10`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                logEvent('Demo', 'Script generation demo started', result);
+            } catch (error) {
+                logEvent('Error', 'Failed to start script demo', error.message);
+            }
+        }
+
+        async function triggerVideoDemo() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const clientId = getClientId();
+            
+            try {
+                const response = await fetch(`${serverUrl}/api/v1/sse/demo/video-processing/${clientId}?video_title=Demo Video&duration=15`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                logEvent('Demo', 'Video processing demo started', result);
+            } catch (error) {
+                logEvent('Error', 'Failed to start video demo', error.message);
+            }
+        }
+
+        async function triggerNotificationDemo() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const clientId = getClientId();
+            
+            try {
+                const response = await fetch(`${serverUrl}/api/v1/sse/demo/notifications/${clientId}?count=3&interval=2`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                logEvent('Demo', 'Notification demo started', result);
+            } catch (error) {
+                logEvent('Error', 'Failed to start notification demo', error.message);
+            }
+        }
+
+        async function sendCustomNotification() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const clientId = getClientId();
+            const title = prompt('Notification title:', 'Test Notification');
+            const message = prompt('Notification message:', 'This is a test notification');
+            
+            if (title && message) {
+                try {
+                    const response = await fetch(`${serverUrl}/api/v1/sse/send-notification/${clientId}?title=${encodeURIComponent(title)}&message=${encodeURIComponent(message)}&notification_type=info`, {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+                    logEvent('Notification', 'Custom notification sent', result);
+                } catch (error) {
+                    logEvent('Error', 'Failed to send notification', error.message);
+                }
+            }
+        }
+
+        async function getSSEStatus() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            
+            try {
+                const response = await fetch(`${serverUrl}/api/v1/sse/status`);
+                const result = await response.json();
+                logEvent('Status', 'SSE status retrieved', result);
+            } catch (error) {
+                logEvent('Error', 'Failed to get SSE status', error.message);
+            }
+        }
+
+        function clearEvents() {
+            const eventsLog = document.getElementById('eventsLog');
+            eventsLog.innerHTML = '<div class="event-item"><div class="event-timestamp">Events log cleared</div></div>';
+            eventsCount = 0;
+            document.getElementById('eventsReceived').textContent = '0';
+        }
+
+        // Request notification permission on page load
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    </script>
+</body>
+</html>

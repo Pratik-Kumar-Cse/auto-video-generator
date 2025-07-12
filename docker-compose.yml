@@ -33,7 +33,7 @@ services:
       - redis
     volumes:
       - .:/app
-    command: poetry run celery -A app.tasks.celery_app worker --loglevel=info
+    command: poetry run celery -A app.core.celery_app worker --loglevel=info
     networks:
       - video-generator-network
 
@@ -50,7 +50,7 @@ services:
       - redis
     volumes:
       - .:/app
-    command: poetry run celery -A app.tasks.celery_app beat --loglevel=info
+    command: poetry run celery -A app.core.celery_app beat --loglevel=info
     networks:
       - video-generator-network
 
@@ -64,7 +64,7 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
     depends_on:
       - redis
-    command: poetry run celery -A app.tasks.celery_app flower --port=5555
+    command: poetry run celery -A app.core.celery_app flower --port=5555
     networks:
       - video-generator-network
 

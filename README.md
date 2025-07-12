@@ -9,7 +9,7 @@ A comprehensive FastAPI-based video generation service with script management, v
 - **Authentication**: JWT-based authentication and user management
 - **Subscription System**: Credit-based subscription management with usage tracking
 - **Real-time Features**: Server-Sent Events for progress tracking
-- **Multi-Provider Integration**: Support for multiple AI providers and upload services (YouTube, LinkedIn)
+- **Multi-Provider Integration**: Support for multiple AI providers (OpenAI, REQUESTY, Claude, Gemini, DeepSeek) and upload services (YouTube, LinkedIn)
 - **Advanced Analytics**: Comprehensive analytics and search functionality
 - **Background Processing**: Celery-based task queue with Redis broker
 
@@ -113,6 +113,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # AI Services
 OPENAI_API_KEY=your-openai-key
+REQUESTY_KEY=your-requesty-key
 CLAUDE_API_KEY=your-claude-key
 GEMINI_API_KEY=your-gemini-key
 
@@ -146,17 +147,17 @@ poetry run uvicorn main:app --host 0.0.0.0 --port 8000
 
 Start Celery worker:
 ```bash
-poetry run celery -A app.tasks.celery_app worker --loglevel=info
+poetry run celery -A app.core.celery_app worker --loglevel=info
 ```
 
 Start Celery beat scheduler:
 ```bash
-poetry run celery -A app.tasks.celery_app beat --loglevel=info
+poetry run celery -A app.core.celery_app beat --loglevel=info
 ```
 
 Monitor with Celery Flower:
 ```bash
-poetry run celery -A app.tasks.celery_app flower --port=5555
+poetry run celery -A app.core.celery_app flower --port=5555
 ```
 
 ## API Documentation

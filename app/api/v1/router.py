@@ -4,7 +4,7 @@ API v1 router setup
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import videos, scripts
+from app.api.v1.endpoints import videos, scripts, sse, events
 
 # Create API v1 router
 api_router = APIRouter()
@@ -13,6 +13,10 @@ api_router = APIRouter()
 api_router.include_router(videos.router, prefix="/videos", tags=["videos"])
 
 api_router.include_router(scripts.router, prefix="/scripts", tags=["scripts"])
+
+api_router.include_router(sse.router, prefix="/sse", tags=["sse"])
+
+api_router.include_router(events.router, prefix="/events", tags=["events"])
 
 
 # Health check endpoint
@@ -37,7 +41,10 @@ async def api_info():
         "endpoints": {
             "videos": "/api/v1/videos",
             "scripts": "/api/v1/scripts",
-            "memory-bank": "/api/v1/memory-bank",
+            "sse": "/api/v1/sse",
+            "events": "/api/v1/events",
+            "script-events": "/api/v1/events/script-generation",
+            "video-events": "/api/v1/events/video-generation",
             "health": "/api/v1/health",
             "docs": "/docs",
             "redoc": "/redoc",

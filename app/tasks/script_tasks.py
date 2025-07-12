@@ -4,21 +4,19 @@ Script generation Celery tasks
 
 import asyncio
 import json
-from datetime import datetime
-from typing import Dict, Any, Optional
-
-from celery import current_task
-from motor.motor_asyncio import AsyncIOMotorClient
+from datetime import datetime, timedelta
+from typing import Dict, Any
 
 from app.core.celery_app import celery_app
 from app.core.config import settings
-from app.core.database import get_database_client
+from app.core.database import get_database
 from app.core.redis_client import RedisService
 from app.services.script_service import ScriptService
-from app.models.script import ScriptStatus, ScriptType
-from app.core.exceptions import ScriptProcessingError
+from app.constant.enum.script_enum import ScriptStatus, ScriptType
+from app.core.exceptions import ScriptProcessingException
+from app.loggers.logger import get_logger
 
-# settings is already imported from config
+logger = get_logger(__name__)
 
 
 async def update_task_progress(
@@ -40,7 +38,7 @@ async def update_task_progress(
             expire=3600
         )
     except Exception as e:
-        print(f"Failed to update task progress: {e}")
+        logger.error(f"Failed to update task progress: {e}", exc_info=True)
 
 
 async def generate_script_content(
@@ -179,13 +177,16 @@ def generate_script_task(
     
     async def _generate_script():
         # Initialize services
-        client = get_database_client()
-        db = client[settings.MONGODB_DB_NAME]
+        db = await get_database()
         script_service = ScriptService(db)
         redis_service = RedisService()
         
         try:
             task_id = self.request.id
+            logger.info(
+                f"Starting script generation task: {task_id} "
+                f"for script {script_id}"
+            )
             
             # Update progress: Starting
             await update_task_progress(
@@ -235,6 +236,9 @@ def generate_script_task(
                 task_id, 100, "Script generation completed", redis_service
             )
             
+            logger.info(
+                f"Script generation completed successfully: {script_id}"
+            )
             return {
                 "status": "success",
                 "script_id": script_id,
@@ -242,22 +246,29 @@ def generate_script_task(
             }
             
         except Exception as e:
+            logger.error(
+                f"Script generation failed for {script_id}: {e}", exc_info=True
+            )
             # Update script status to failed
             await script_service.update_script_status(
-                script_id, 
-                ScriptStatus.FAILED, 
+                script_id,
+                ScriptStatus.FAILED,
                 f"Generation failed: {str(e)}"
             )
             
             # Update progress: Failed
             await update_task_progress(
-                self.request.id, 0, f"Generation failed: {str(e)}", redis_service
+                self.request.id, 0, f"Generation failed: {str(e)}",
+                redis_service
             )
             
-            raise ScriptProcessingError(f"Script generation failed: {str(e)}")
+            raise ScriptProcessingException(
+                f"Script generation failed: {str(e)}"
+            )
         
         finally:
-            await client.close()
+            # Database connection is managed globally, no need to close here
+            pass
             await redis_service.close()
     
     # Run async function
@@ -280,8 +291,7 @@ def regenerate_script_task(
     
     async def _regenerate_script():
         # Initialize services
-        client = get_database_client()
-        db = client[settings.MONGODB_DB_NAME]
+        db = await get_database()
         script_service = ScriptService(db)
         redis_service = RedisService()
         
@@ -351,10 +361,11 @@ def regenerate_script_task(
                 self.request.id, 0, f"Regeneration failed: {str(e)}", redis_service
             )
             
-            raise ScriptProcessingError(f"Script regeneration failed: {str(e)}")
+            raise ScriptProcessingException(f"Script regeneration failed: {str(e)}")
         
         finally:
-            await client.close()
+            # Database connection is managed globally, no need to close here
+            pass
             await redis_service.close()
     
     # Run async function
@@ -371,8 +382,7 @@ def cleanup_failed_scripts_task(self, max_age_hours: int = 24):
     """Clean up failed scripts older than specified hours"""
     
     async def _cleanup_failed_scripts():
-        client = get_database_client()
-        db = client[settings.MONGODB_DB_NAME]
+        db = await get_database()
         script_service = ScriptService(db)
         
         try:
@@ -392,7 +402,8 @@ def cleanup_failed_scripts_task(self, max_age_hours: int = 24):
             raise Exception(f"Cleanup failed: {str(e)}")
         
         finally:
-            await client.close()
+            # Database connection is managed globally, no need to close here
+            pass
     
     # Run async function
     loop = asyncio.new_event_loop()

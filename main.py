@@ -3,35 +3,31 @@ FastAPI Video Generation Service
 Main application entry point with comprehensive middleware and configuration
 """
 
-import os
 import logging
 from contextlib import asynccontextmanager
-from typing import List
 
-from fastapi import FastAPI, Request, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBearer
-from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.openapi.utils import get_openapi
 import uvicorn
-
-from app.core.config import settings
-from app.core.database import init_db, close_db
-from app.core.redis_client import init_redis, close_redis
-from app.core.celery_app import celery_app
-from app.middleware.security import SecurityMiddleware
-from app.middleware.rate_limit import RateLimitMiddleware
-from app.middleware.logging import LoggingMiddleware
 from app.api.v1.router import api_router
+from app.core.config import settings
+from app.core.database import close_db, init_db
 from app.core.exceptions import (
-    CustomHTTPException,
-    ValidationException,
-    DatabaseException,
     AuthenticationException,
     AuthorizationException,
+    CustomHTTPException,
+    DatabaseException,
+    ValidationException,
 )
+from app.core.redis_client import close_redis, init_redis
+from app.loggers.logger import setup_logger
+from app.middleware.logging import LoggingMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.security import SecurityMiddleware
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer
 
 # Configure logging
 logging.basicConfig(
@@ -42,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Security scheme for Swagger UI
 security = HTTPBearer()
+setup_logger()
 
 
 @asynccontextmanager
@@ -88,14 +85,14 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Add security middleware
-    app.add_middleware(SecurityMiddleware)
+    # # Add security middleware
+    # app.add_middleware(SecurityMiddleware)
 
-    # Add rate limiting middleware
-    app.add_middleware(RateLimitMiddleware)
+    # # Add rate limiting middleware
+    # app.add_middleware(RateLimitMiddleware)
 
-    # Add logging middleware
-    app.add_middleware(LoggingMiddleware)
+    # # Add logging middleware
+    # app.add_middleware(LoggingMiddleware)
 
     # Add CORS middleware
     app.add_middleware(
